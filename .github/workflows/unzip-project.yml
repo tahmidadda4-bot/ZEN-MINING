@@ -282,7 +282,7 @@ jobs:
       # --------------------------------------------------
       # 12. Commit everything
       # --------------------------------------------------
-      - name: Commit extracted project
+            - name: Commit extracted project
         shell: bash
         run: |
           set -e
@@ -290,20 +290,23 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add -A
+          # Do NOT stage workflow files.
+          # GitHub blocks GITHUB_TOKEN from creating/updating
+          # workflow files without workflow permission.
+
+          git add \
+            user_app \
+            admin_panel \
+            supabase \
+            database \
+            assets \
+            docs \
+            README.md \
+            VERSION.txt
 
           if git diff --cached --quiet; then
-
             echo "No changes detected."
-            echo "Nothing to commit."
-
           else
-
-            git commit \
-              -m "Extract ZEN MINING production project"
-
+            git commit -m "Extract ZEN MINING production project"
             git push
-
-            echo "Project committed and pushed successfully."
-
           fi
