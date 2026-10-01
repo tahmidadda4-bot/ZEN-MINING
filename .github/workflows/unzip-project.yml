@@ -1,0 +1,97 @@
+name: Extract ZEN MINING Production Project
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract-project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify ZIP
+        run: |
+          test -f release/zen_mining_production_v1_1.zip
+
+      - name: Extract ZIP
+        run: |
+          rm -rf _extracted
+          mkdir -p _extracted
+          unzip -q release/zen_mining_production_v1_1.zip -d _extracted
+
+      - name: Locate project root
+        run: |
+          PROJECT_ROOT=$(find _extracted -maxdepth 1 -mindepth 1 -type d | head -n 1)
+
+          if [ -z "$PROJECT_ROOT" ]; then
+            echo "Project root not found."
+            exit 1
+          fi
+
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      - name: Prepare final structure
+        run: |
+          rm -rf user_app admin_panel supabase database assets docs
+          rm -f VERSION.txt README.md
+
+          mkdir -p user_app
+          mkdir -p admin_panel
+          mkdir -p supabase
+          mkdir -p database
+          mkdir -p assets
+          mkdir -p docs
+
+          cp -R "$PROJECT_ROOT/user_app/." user_app/
+          cp -R "$PROJECT_ROOT/admin_web/." admin_panel/
+          cp -R "$PROJECT_ROOT/supabase/." supabase/
+          cp -R "$PROJECT_ROOT/database/." database/
+          cp -R "$PROJECT_ROOT/assets/." assets/
+          cp -R "$PROJECT_ROOT/docs/." docs/
+
+          cp "$PROJECT_ROOT/README.md" README.md
+          cp "$PROJECT_ROOT/VERSION.txt" VERSION.txt
+
+      - name: Validate required directories
+        run: |
+          test -f user_app/pubspec.yaml
+          test -f admin_panel/index.html
+          test -f database/PRODUCTION.sql
+          test -f supabase/config.toml
+          test -f README.md
+
+      - name: Create required workflow directory
+        run: |
+          mkdir -p .github/workflows
+
+      - name: Remove temporary extraction
+        run: |
+          rm -rf _extracted
+
+      - name: Show final project structure
+        run: |
+          echo "===== FINAL STRUCTURE ====="
+          find . -maxdepth 3 \
+            -not -path './.git/*' \
+            -not -path './release/*' \
+            -not -path './.github/*' \
+            -type f | sort
+
+      - name: Commit extracted project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add user_app admin_panel supabase database assets docs README.md VERSION.txt
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Extract ZEN MINING production project"
+            git push
+          fi
