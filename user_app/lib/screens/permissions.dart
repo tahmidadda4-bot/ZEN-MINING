@@ -1,0 +1,15 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/green_button.dart';
+import '../services/native_activity_service.dart';
+import 'home.dart';
+class PermissionsScreen extends StatefulWidget{const PermissionsScreen({super.key});@override State<PermissionsScreen>createState()=>_PermissionsState();}
+class _PermissionsState extends State<PermissionsScreen>{final n=NativeActivityService();bool granted=false,busy=true;String? error;
+Future<void> check()async{final v=await n.hasUsageAccess();if(mounted)setState((){granted=v;busy=false;});}
+Future<void> registerDevice()async{setState(()=>busy=true);try{final android=await DeviceInfoPlugin().androidInfo;final info=await PackageInfo.fromPlatform();final fp=android.id;final r=await Supabase.instance.client.functions.invoke('register-device',body:{'deviceFingerprint':fp,'deviceName':android.device,'model':android.model,'androidVersion':android.version.release,'appVersion':info.version});final token=(r.data as Map)['monitorToken'];if(token is! String||token.isEmpty)throw Exception('Device monitoring token was not issued');final prefs=await SharedPreferences.getInstance();await prefs.setString('device_monitor_token',token);await Permission.notification.request();await n.startMonitoring(supabaseUrl:const String.fromEnvironment('SUPABASE_URL'),monitorToken:token);if(mounted)Navigator.pushAndRemoveUntil(context,MaterialPageRoute(builder:(_)=>const HomeScreen()),(_)=>false);}catch(e){if(mounted)setState(()=>error=e.toString());}finally{if(mounted)setState(()=>busy=false);}}
+@override void initState(){super.initState();check();}
+@override Widget build(BuildContext c)=>Scaffold(body:SafeArea(child:Padding(padding:const EdgeInsets.all(22),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const SizedBox(height:20),const Text('Required Permissions',style:TextStyle(fontSize:25,fontWeight:FontWeight.w900)),const SizedBox(height:8),const Text('Usage access is required to measure which apps are used and for how long. Message content is not collected.',style:TextStyle(color:Color(0xFF91A9A0))),const SizedBox(height:24),Card(child:ListTile(leading:const Icon(Icons.data_usage,color:Color(0xFF39E58C)),title:const Text('Usage Access'),subtitle:Text(granted?'Granted':'Required'),trailing:TextButton(onPressed:()=>n.openUsageAccessSettings(),child:Text(granted?'Open':'Allow')))),const SizedBox(height:12),const Card(child:ListTile(leading:Icon(Icons.security,color:Color(0xFF39E58C)),title:Text('Privacy'),subtitle:Text('Only app/package usage metadata is synchronized.'))),if(error!=null)Padding(padding:const EdgeInsets.only(top:12),child:Text(error!,style:const TextStyle(color:Color(0xFFFF5470)))),const Spacer(),GreenButton(label:busy?'Please wait':granted?'Continue':'Open Settings',onTap:busy?null:granted?registerDevice:()=>n.openUsageAccessSettings())]))));}
