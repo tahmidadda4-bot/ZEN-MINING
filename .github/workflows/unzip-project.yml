@@ -1,4 +1,4 @@
-name: Extract ZEN MINING Production ZIP
+name: Extract ZEN MINING Production Project
 
 on:
   workflow_dispatch:
@@ -8,30 +8,45 @@ permissions:
 
 jobs:
   extract-project:
+    name: Extract Production ZIP
     runs-on: ubuntu-latest
 
     steps:
+
+      # --------------------------------------------------
+      # 1. Checkout repository
+      # --------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find ZIP file
+
+      # --------------------------------------------------
+      # 2. Find the uploaded ZIP
+      # --------------------------------------------------
+      - name: Find production ZIP
         shell: bash
         run: |
           set -e
 
-          echo "Searching for zen_mining_production_v1_1.zip..."
+          echo "Searching for:"
+          echo "zen_mining_production_v1_1.zip"
+          echo
 
-          ZIP_FILE=$(find . -type f \
-            -name "zen_mining_production_v1_1.zip" \
-            -not -path "./.git/*" \
-            | head -n 1)
+          ZIP_FILE="$(find . \
+            -type f \
+            -name 'zen_mining_production_v1_1.zip' \
+            -not -path './.git/*' \
+            | head -n 1)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: zen_mining_production_v1_1.zip was not found."
-            echo ""
-            echo "Repository files:"
-            find . -maxdepth 4 -type f \
-              -not -path "./.git/*" | sort
+            echo "ERROR: ZIP file was not found."
+            echo
+            echo "Files currently in repository:"
+            find . \
+              -maxdepth 4 \
+              -type f \
+              -not -path './.git/*' \
+              | sort
             exit 1
           fi
 
@@ -40,149 +55,233 @@ jobs:
 
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
-      - name: Verify ZIP
+
+      # --------------------------------------------------
+      # 3. Verify ZIP integrity
+      # --------------------------------------------------
+      - name: Verify ZIP integrity
         shell: bash
         run: |
           set -e
 
-          echo "Testing:"
+          echo "Testing ZIP:"
           echo "$ZIP_FILE"
+          echo
 
           unzip -t "$ZIP_FILE"
 
+          echo
+          echo "ZIP integrity check PASSED."
+
+
+      # --------------------------------------------------
+      # 4. Extract ZIP
+      # --------------------------------------------------
       - name: Extract ZIP
         shell: bash
         run: |
           set -e
 
-          rm -rf _zip_extract
-          mkdir -p _zip_extract
+          rm -rf _zen_extract
+          mkdir -p _zen_extract
 
-          unzip -q "$ZIP_FILE" -d _zip_extract
+          unzip -q "$ZIP_FILE" -d _zen_extract
 
-          echo "ZIP extracted successfully."
+          echo "ZIP extraction completed."
 
+
+      # --------------------------------------------------
+      # 5. Detect the actual project root
+      # --------------------------------------------------
       - name: Detect project root
         shell: bash
         run: |
           set -e
 
-          echo "===== EXTRACTED STRUCTURE ====="
-          find _zip_extract -maxdepth 3 -print | sort
+          echo "Extracted content:"
+          echo "------------------"
 
-          ROOT="_zip_extract"
+          find _zen_extract \
+            -maxdepth 3 \
+            -print \
+            | sort
 
-          TOP_DIRS=$(find "$ROOT" \
+          echo
+          echo "Detecting project root..."
+
+          TOP_DIRS="$(find _zen_extract \
             -mindepth 1 \
             -maxdepth 1 \
-            -type d)
+            -type d)"
 
-          TOP_FILES=$(find "$ROOT" \
+          TOP_FILES="$(find _zen_extract \
             -mindepth 1 \
             -maxdepth 1 \
-            -type f)
+            -type f)"
 
-          DIR_COUNT=$(printf '%s\n' "$TOP_DIRS" | sed '/^$/d' | wc -l)
-          FILE_COUNT=$(printf '%s\n' "$TOP_FILES" | sed '/^$/d' | wc -l)
+          DIR_COUNT="$(printf '%s\n' "$TOP_DIRS" \
+            | sed '/^$/d' \
+            | wc -l)"
+
+          FILE_COUNT="$(printf '%s\n' "$TOP_FILES" \
+            | sed '/^$/d' \
+            | wc -l)"
 
           if [ "$DIR_COUNT" -eq 1 ] && [ "$FILE_COUNT" -eq 0 ]; then
-            PROJECT_ROOT=$(printf '%s\n' "$TOP_DIRS" | head -n 1)
+            PROJECT_ROOT="$(printf '%s\n' "$TOP_DIRS" | head -n 1)"
           else
-            PROJECT_ROOT="$ROOT"
+            PROJECT_ROOT="_zen_extract"
           fi
 
-          echo "Detected project root:"
+          echo
+          echo "PROJECT ROOT:"
           echo "$PROJECT_ROOT"
 
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
-      - name: Copy project into repository
+
+      # --------------------------------------------------
+      # 6. Validate the actual ZIP structure
+      # --------------------------------------------------
+      - name: Validate ZIP project structure
         shell: bash
         run: |
           set -e
 
-          cp -R "$PROJECT_ROOT"/. .
+          echo "Validating extracted project..."
+
+          test -d "$PROJECT_ROOT/user_app"
+          test -f "$PROJECT_ROOT/user_app/pubspec.yaml"
+
+          test -d "$PROJECT_ROOT/admin_web"
+          test -f "$PROJECT_ROOT/admin_web/index.html"
+
+          test -d "$PROJECT_ROOT/supabase"
+          test -f "$PROJECT_ROOT/supabase/config.toml"
+
+          test -d "$PROJECT_ROOT/database"
+          test -f "$PROJECT_ROOT/database/PRODUCTION.sql"
+
+          test -d "$PROJECT_ROOT/assets"
+          test -d "$PROJECT_ROOT/docs"
+
+          test -f "$PROJECT_ROOT/README.md"
+          test -f "$PROJECT_ROOT/VERSION.txt"
+
+          echo
+          echo "ZIP PROJECT STRUCTURE: VALID"
+
+
+      # --------------------------------------------------
+      # 7. Copy project to repository root
+      # --------------------------------------------------
+      - name: Install project into repository
+        shell: bash
+        run: |
+          set -e
+
+          echo "Copying production project..."
+
+          cp -a "$PROJECT_ROOT"/. .
 
           echo "Project copied successfully."
 
-      - name: Normalize admin panel folder
+
+      # --------------------------------------------------
+      # 8. Rename admin_web → admin_panel
+      # --------------------------------------------------
+      - name: Normalize admin panel name
         shell: bash
         run: |
           set -e
 
-          if [ -d "admin_web" ] && [ ! -d "admin_panel" ]; then
+          if [ -d "admin_web" ]; then
+
+            rm -rf admin_panel
+
             mv admin_web admin_panel
-            echo "admin_web renamed to admin_panel"
+
+            echo "admin_web renamed to admin_panel."
+
+          elif [ -d "admin_panel" ]; then
+
+            echo "admin_panel already exists."
+
+          else
+
+            echo "ERROR: Admin panel directory not found."
+            exit 1
+
           fi
 
-      - name: Remove temporary files
-        run: |
-          rm -rf _zip_extract
 
-      - name: Validate project structure
+      # --------------------------------------------------
+      # 9. Remove temporary extraction directory
+      # --------------------------------------------------
+      - name: Cleanup
+        shell: bash
+        run: |
+          rm -rf _zen_extract
+
+          echo "Temporary extraction files removed."
+
+
+      # --------------------------------------------------
+      # 10. Final validation
+      # --------------------------------------------------
+      - name: Final project validation
         shell: bash
         run: |
           set -e
 
-          echo "===== VALIDATING PROJECT ====="
+          echo "=========================================="
+          echo " FINAL ZEN MINING PROJECT VALIDATION"
+          echo "=========================================="
 
-          REQUIRED=0
+          test -d user_app
+          test -f user_app/pubspec.yaml
 
-          if [ -d "user_app" ]; then
-            echo "PASS: user_app/"
-          else
-            echo "FAIL: user_app/"
-            REQUIRED=1
-          fi
+          test -d admin_panel
+          test -f admin_panel/index.html
 
-          if [ -d "admin_panel" ]; then
-            echo "PASS: admin_panel/"
-          else
-            echo "FAIL: admin_panel/"
-            REQUIRED=1
-          fi
+          test -d supabase
+          test -f supabase/config.toml
 
-          if [ -d "supabase" ]; then
-            echo "PASS: supabase/"
-          else
-            echo "FAIL: supabase/"
-            REQUIRED=1
-          fi
+          test -d database
+          test -f database/PRODUCTION.sql
 
-          if [ -d "database" ]; then
-            echo "PASS: database/"
-          else
-            echo "FAIL: database/"
-            REQUIRED=1
-          fi
+          test -d assets
+          test -d docs
 
-          if [ "$REQUIRED" -ne 0 ]; then
-            echo ""
-            echo "Expected production structure was not found."
-            echo ""
-            echo "Current repository structure:"
-            find . -maxdepth 3 \
-              -not -path "./.git/*" \
-              -not -path "./release/*" \
-              -print | sort
+          test -f README.md
+          test -f VERSION.txt
 
-            exit 1
-          fi
+          echo
+          echo "ALL REQUIRED PROJECT COMPONENTS: PASS"
 
-          echo ""
-          echo "PROJECT STRUCTURE VALID."
 
-      - name: Show final structure
+      # --------------------------------------------------
+      # 11. Display final structure
+      # --------------------------------------------------
+      - name: Show final project structure
         shell: bash
         run: |
-          echo "================================"
-          echo " FINAL ZEN MINING STRUCTURE"
-          echo "================================"
+          echo
+          echo "=========================================="
+          echo " FINAL PROJECT STRUCTURE"
+          echo "=========================================="
 
-          find . -maxdepth 3 \
-            -not -path "./.git/*" \
-            -print | sort
+          find . \
+            -maxdepth 3 \
+            -not -path './.git/*' \
+            -not -path './zen_mining_production_v1_1.zip' \
+            -print \
+            | sort
 
+
+      # --------------------------------------------------
+      # 12. Commit everything
+      # --------------------------------------------------
       - name: Commit extracted project
         shell: bash
         run: |
@@ -194,8 +293,17 @@ jobs:
           git add -A
 
           if git diff --cached --quiet; then
-            echo "No changes to commit."
+
+            echo "No changes detected."
+            echo "Nothing to commit."
+
           else
-            git commit -m "Extract ZEN MINING production project"
+
+            git commit \
+              -m "Extract ZEN MINING production project"
+
             git push
+
+            echo "Project committed and pushed successfully."
+
           fi
