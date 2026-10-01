@@ -13,24 +13,26 @@ jobs:
 
     steps:
 
-      # --------------------------------------------------
+      # ==================================================
       # 1. Checkout repository
-      # --------------------------------------------------
+      # ==================================================
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
 
-      # --------------------------------------------------
-      # 2. Find the uploaded ZIP
-      # --------------------------------------------------
+      # ==================================================
+      # 2. Find production ZIP
+      # ==================================================
       - name: Find production ZIP
         shell: bash
         run: |
           set -e
 
-          echo "Searching for:"
-          echo "zen_mining_production_v1_1.zip"
-          echo
+          echo "=========================================="
+          echo " SEARCHING FOR PRODUCTION ZIP"
+          echo "=========================================="
 
           ZIP_FILE="$(find . \
             -type f \
@@ -39,75 +41,94 @@ jobs:
             | head -n 1)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file was not found."
-            echo
-            echo "Files currently in repository:"
+            echo ""
+            echo "ERROR:"
+            echo "zen_mining_production_v1_1.zip was not found."
+            echo ""
+            echo "Repository files:"
             find . \
               -maxdepth 4 \
               -type f \
               -not -path './.git/*' \
               | sort
+
             exit 1
           fi
 
+          echo ""
           echo "ZIP FOUND:"
           echo "$ZIP_FILE"
+
+          echo ""
+          echo "ZIP SIZE:"
+          ls -lh "$ZIP_FILE"
 
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
 
 
-      # --------------------------------------------------
+      # ==================================================
       # 3. Verify ZIP integrity
-      # --------------------------------------------------
+      # ==================================================
       - name: Verify ZIP integrity
         shell: bash
         run: |
           set -e
 
-          echo "Testing ZIP:"
-          echo "$ZIP_FILE"
-          echo
+          echo "=========================================="
+          echo " VERIFYING ZIP"
+          echo "=========================================="
 
           unzip -t "$ZIP_FILE"
 
-          echo
-          echo "ZIP integrity check PASSED."
+          echo ""
+          echo "ZIP INTEGRITY: OK"
 
 
-      # --------------------------------------------------
+      # ==================================================
       # 4. Extract ZIP
-      # --------------------------------------------------
+      # ==================================================
       - name: Extract ZIP
         shell: bash
         run: |
           set -e
 
+          echo "=========================================="
+          echo " EXTRACTING ZIP"
+          echo "=========================================="
+
           rm -rf _zen_extract
+
           mkdir -p _zen_extract
 
           unzip -q "$ZIP_FILE" -d _zen_extract
 
-          echo "ZIP extraction completed."
+          echo ""
+          echo "EXTRACTION: SUCCESS"
 
 
-      # --------------------------------------------------
-      # 5. Detect the actual project root
-      # --------------------------------------------------
+      # ==================================================
+      # 5. Detect project root
+      # ==================================================
       - name: Detect project root
         shell: bash
         run: |
           set -e
 
-          echo "Extracted content:"
-          echo "------------------"
+          echo "=========================================="
+          echo " DETECTING PROJECT ROOT"
+          echo "=========================================="
+
+          echo ""
+          echo "Extracted structure:"
+          echo "------------------------------------------"
 
           find _zen_extract \
             -maxdepth 3 \
             -print \
             | sort
 
-          echo
-          echo "Detecting project root..."
+          echo ""
+          echo "------------------------------------------"
 
           TOP_DIRS="$(find _zen_extract \
             -mindepth 1 \
@@ -128,185 +149,430 @@ jobs:
             | wc -l)"
 
           if [ "$DIR_COUNT" -eq 1 ] && [ "$FILE_COUNT" -eq 0 ]; then
+
             PROJECT_ROOT="$(printf '%s\n' "$TOP_DIRS" | head -n 1)"
+
           else
+
             PROJECT_ROOT="_zen_extract"
+
           fi
 
-          echo
+          echo ""
           echo "PROJECT ROOT:"
           echo "$PROJECT_ROOT"
 
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
 
-      # --------------------------------------------------
-      # 6. Validate the actual ZIP structure
-      # --------------------------------------------------
-      - name: Validate ZIP project structure
+      # ==================================================
+      # 6. Validate ZIP contents
+      # ==================================================
+      - name: Validate ZIP project
         shell: bash
         run: |
           set -e
 
-          echo "Validating extracted project..."
+          echo "=========================================="
+          echo " VALIDATING ZIP PROJECT"
+          echo "=========================================="
+
+          echo ""
+          echo "Checking user_app..."
 
           test -d "$PROJECT_ROOT/user_app"
           test -f "$PROJECT_ROOT/user_app/pubspec.yaml"
 
+          echo "PASS: user_app"
+
+
+          echo ""
+          echo "Checking admin_web..."
+
           test -d "$PROJECT_ROOT/admin_web"
           test -f "$PROJECT_ROOT/admin_web/index.html"
+
+          echo "PASS: admin_web"
+
+
+          echo ""
+          echo "Checking supabase..."
 
           test -d "$PROJECT_ROOT/supabase"
           test -f "$PROJECT_ROOT/supabase/config.toml"
 
+          echo "PASS: supabase"
+
+
+          echo ""
+          echo "Checking database..."
+
           test -d "$PROJECT_ROOT/database"
           test -f "$PROJECT_ROOT/database/PRODUCTION.sql"
 
+          echo "PASS: database"
+
+
+          echo ""
+          echo "Checking assets..."
+
           test -d "$PROJECT_ROOT/assets"
+
+          echo "PASS: assets"
+
+
+          echo ""
+          echo "Checking docs..."
+
           test -d "$PROJECT_ROOT/docs"
 
+          echo "PASS: docs"
+
+
+          echo ""
+          echo "Checking README..."
+
           test -f "$PROJECT_ROOT/README.md"
+
+          echo "PASS: README.md"
+
+
+          echo ""
+          echo "Checking VERSION..."
+
           test -f "$PROJECT_ROOT/VERSION.txt"
 
-          echo
-          echo "ZIP PROJECT STRUCTURE: VALID"
+          echo "PASS: VERSION.txt"
 
 
-      # --------------------------------------------------
-      # 7. Copy project to repository root
-      # --------------------------------------------------
-      - name: Install project into repository
+          echo ""
+          echo "=========================================="
+          echo " ZIP PROJECT VALIDATION: PASSED"
+          echo "=========================================="
+
+
+      # ==================================================
+      # 7. Remove old extracted project
+      # ==================================================
+      - name: Clean old project files
         shell: bash
         run: |
           set -e
 
-          echo "Copying production project..."
+          echo "=========================================="
+          echo " CLEANING OLD PROJECT"
+          echo "=========================================="
 
-          cp -a "$PROJECT_ROOT"/. .
+          rm -rf user_app
+          rm -rf admin_web
+          rm -rf admin_panel
+          rm -rf supabase
+          rm -rf database
+          rm -rf assets
+          rm -rf docs
 
-          echo "Project copied successfully."
+          rm -f README.md
+          rm -f VERSION.txt
+
+          echo ""
+          echo "Old project files removed."
 
 
-      # --------------------------------------------------
-      # 8. Rename admin_web → admin_panel
-      # --------------------------------------------------
-      - name: Normalize admin panel name
+      # ==================================================
+      # 8. Copy project
+      #
+      # IMPORTANT:
+      # .github is intentionally NOT copied.
+      #
+      # This prevents GitHub Actions permission error:
+      #
+      # "refusing to allow a GitHub App to create or update
+      # workflow ... without workflows permission"
+      # ==================================================
+      - name: Copy production project
         shell: bash
         run: |
           set -e
 
-          if [ -d "admin_web" ]; then
+          echo "=========================================="
+          echo " COPYING PRODUCTION PROJECT"
+          echo "=========================================="
 
-            rm -rf admin_panel
+          mkdir -p user_app
+          mkdir -p supabase
+          mkdir -p database
+          mkdir -p assets
+          mkdir -p docs
 
-            mv admin_web admin_panel
+          cp -a "$PROJECT_ROOT/user_app/." user_app/
 
-            echo "admin_web renamed to admin_panel."
+          cp -a "$PROJECT_ROOT/admin_web/." admin_web_tmp/
 
-          elif [ -d "admin_panel" ]; then
+          cp -a "$PROJECT_ROOT/supabase/." supabase/
 
-            echo "admin_panel already exists."
+          cp -a "$PROJECT_ROOT/database/." database/
 
-          else
+          cp -a "$PROJECT_ROOT/assets/." assets/
 
-            echo "ERROR: Admin panel directory not found."
-            exit 1
+          cp -a "$PROJECT_ROOT/docs/." docs/
 
-          fi
+          cp "$PROJECT_ROOT/README.md" README.md
+
+          cp "$PROJECT_ROOT/VERSION.txt" VERSION.txt
+
+          echo ""
+          echo "Production project copied."
+
+          echo ""
+          echo "IMPORTANT:"
+          echo "ZIP .github directory was NOT copied."
 
 
-      # --------------------------------------------------
-      # 9. Remove temporary extraction directory
-      # --------------------------------------------------
-      - name: Cleanup
+      # ==================================================
+      # 9. Rename admin_web to admin_panel
+      # ==================================================
+      - name: Rename admin panel
         shell: bash
         run: |
+          set -e
+
+          echo "=========================================="
+          echo " CONFIGURING ADMIN PANEL"
+          echo "=========================================="
+
+          rm -rf admin_panel
+
+          mv admin_web_tmp admin_panel
+
+          echo ""
+          echo "admin_web -> admin_panel"
+
+          echo "Admin panel ready."
+
+
+      # ==================================================
+      # 10. Remove temporary extraction
+      # ==================================================
+      - name: Cleanup temporary files
+        shell: bash
+        run: |
+          set -e
+
           rm -rf _zen_extract
+          rm -rf admin_web_tmp
 
-          echo "Temporary extraction files removed."
+          echo "Temporary files removed."
 
 
-      # --------------------------------------------------
-      # 10. Final validation
-      # --------------------------------------------------
-      - name: Final project validation
+      # ==================================================
+      # 11. Validate final project
+      # ==================================================
+      - name: Validate final project
         shell: bash
         run: |
           set -e
 
           echo "=========================================="
-          echo " FINAL ZEN MINING PROJECT VALIDATION"
+          echo " FINAL PROJECT VALIDATION"
           echo "=========================================="
+
+
+          echo ""
+          echo "[1/8] user_app"
 
           test -d user_app
           test -f user_app/pubspec.yaml
 
+          echo "PASS"
+
+
+          echo ""
+          echo "[2/8] admin_panel"
+
           test -d admin_panel
           test -f admin_panel/index.html
+
+          echo "PASS"
+
+
+          echo ""
+          echo "[3/8] supabase"
 
           test -d supabase
           test -f supabase/config.toml
 
+          echo "PASS"
+
+
+          echo ""
+          echo "[4/8] database"
+
           test -d database
           test -f database/PRODUCTION.sql
 
+          echo "PASS"
+
+
+          echo ""
+          echo "[5/8] assets"
+
           test -d assets
+
+          echo "PASS"
+
+
+          echo ""
+          echo "[6/8] docs"
+
           test -d docs
 
+          echo "PASS"
+
+
+          echo ""
+          echo "[7/8] README"
+
           test -f README.md
+
+          echo "PASS"
+
+
+          echo ""
+          echo "[8/8] VERSION"
+
           test -f VERSION.txt
 
-          echo
-          echo "ALL REQUIRED PROJECT COMPONENTS: PASS"
+          echo "PASS"
 
 
-      # --------------------------------------------------
-      # 11. Display final structure
-      # --------------------------------------------------
+          echo ""
+          echo "=========================================="
+          echo " ALL VALIDATION CHECKS PASSED"
+          echo "=========================================="
+
+
+      # ==================================================
+      # 12. Make sure ZIP .github was not copied
+      # ==================================================
+      - name: Protect workflow directory
+        shell: bash
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo " CHECKING GITHUB WORKFLOW DIRECTORY"
+          echo "=========================================="
+
+          if [ -f ".github/workflows/unzip-project.yml" ]; then
+
+            echo "PASS:"
+            echo "Existing unzip-project workflow preserved."
+
+          else
+
+            echo "WARNING:"
+            echo "unzip-project.yml is not present."
+
+          fi
+
+
+          echo ""
+          echo "ZIP workflow files were not copied."
+
+
+      # ==================================================
+      # 13. Show final structure
+      # ==================================================
       - name: Show final project structure
         shell: bash
         run: |
-          echo
+          echo ""
           echo "=========================================="
-          echo " FINAL PROJECT STRUCTURE"
+          echo " FINAL ZEN MINING STRUCTURE"
           echo "=========================================="
 
           find . \
             -maxdepth 3 \
             -not -path './.git/*' \
-            -not -path './zen_mining_production_v1_1.zip' \
+            -not -name 'zen_mining_production_v1_1.zip' \
             -print \
             | sort
 
 
-      # --------------------------------------------------
-      # 12. Commit everything
-      # --------------------------------------------------
-            - name: Commit extracted project
+      # ==================================================
+      # 14. Git status
+      # ==================================================
+      - name: Show Git status
+        shell: bash
+        run: |
+          echo ""
+          echo "=========================================="
+          echo " GIT STATUS"
+          echo "=========================================="
+
+          git status --short
+
+
+      # ==================================================
+      # 15. Commit project
+      # ==================================================
+      - name: Commit extracted project
         shell: bash
         run: |
           set -e
 
+          echo "=========================================="
+          echo " COMMITTING PROJECT"
+          echo "=========================================="
+
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Do NOT stage workflow files.
-          # GitHub blocks GITHUB_TOKEN from creating/updating
-          # workflow files without workflow permission.
+          git config \
+            user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add \
-            user_app \
-            admin_panel \
-            supabase \
-            database \
-            assets \
-            docs \
-            README.md \
-            VERSION.txt
+
+          # Stage only the production project.
+          #
+          # IMPORTANT:
+          # We intentionally do NOT stage .github.
+          #
+          # Therefore the workflow file itself will never
+          # be pushed by this GitHub App.
+
+          git add user_app
+          git add admin_panel
+          git add supabase
+          git add database
+          git add assets
+          git add docs
+          git add README.md
+          git add VERSION.txt
+
+
+          echo ""
+          echo "Files staged."
+
 
           if git diff --cached --quiet; then
-            echo "No changes detected."
+
+            echo ""
+            echo "No project changes detected."
+            echo "Nothing to commit."
+
           else
-            git commit -m "Extract ZEN MINING production project"
+
+            git commit \
+              -m "Extract ZEN MINING production project"
+
+            echo ""
+            echo "Commit created."
+
             git push
+
+            echo ""
+            echo "=========================================="
+            echo " PROJECT PUSHED SUCCESSFULLY"
+            echo "=========================================="
+
           fi
