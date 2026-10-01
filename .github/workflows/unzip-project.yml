@@ -1,4 +1,4 @@
-name: Extract ZEN MINING Production Project
+name: Extract ZEN MINING Production ZIP
 
 on:
   workflow_dispatch:
@@ -14,80 +14,184 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify ZIP
+      - name: Find ZIP file
+        shell: bash
         run: |
-          test -f release/zen_mining_production_v1_1.zip
+          set -e
 
-      - name: Extract ZIP
-        run: |
-          rm -rf _extracted
-          mkdir -p _extracted
-          unzip -q release/zen_mining_production_v1_1.zip -d _extracted
+          echo "Searching for zen_mining_production_v1_1.zip..."
 
-      - name: Locate project root
-        run: |
-          PROJECT_ROOT=$(find _extracted -maxdepth 1 -mindepth 1 -type d | head -n 1)
+          ZIP_FILE=$(find . -type f \
+            -name "zen_mining_production_v1_1.zip" \
+            -not -path "./.git/*" \
+            | head -n 1)
 
-          if [ -z "$PROJECT_ROOT" ]; then
-            echo "Project root not found."
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: zen_mining_production_v1_1.zip was not found."
+            echo ""
+            echo "Repository files:"
+            find . -maxdepth 4 -type f \
+              -not -path "./.git/*" | sort
             exit 1
           fi
 
+          echo "ZIP FOUND:"
+          echo "$ZIP_FILE"
+
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify ZIP
+        shell: bash
+        run: |
+          set -e
+
+          echo "Testing:"
+          echo "$ZIP_FILE"
+
+          unzip -t "$ZIP_FILE"
+
+      - name: Extract ZIP
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf _zip_extract
+          mkdir -p _zip_extract
+
+          unzip -q "$ZIP_FILE" -d _zip_extract
+
+          echo "ZIP extracted successfully."
+
+      - name: Detect project root
+        shell: bash
+        run: |
+          set -e
+
+          echo "===== EXTRACTED STRUCTURE ====="
+          find _zip_extract -maxdepth 3 -print | sort
+
+          ROOT="_zip_extract"
+
+          TOP_DIRS=$(find "$ROOT" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d)
+
+          TOP_FILES=$(find "$ROOT" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type f)
+
+          DIR_COUNT=$(printf '%s\n' "$TOP_DIRS" | sed '/^$/d' | wc -l)
+          FILE_COUNT=$(printf '%s\n' "$TOP_FILES" | sed '/^$/d' | wc -l)
+
+          if [ "$DIR_COUNT" -eq 1 ] && [ "$FILE_COUNT" -eq 0 ]; then
+            PROJECT_ROOT=$(printf '%s\n' "$TOP_DIRS" | head -n 1)
+          else
+            PROJECT_ROOT="$ROOT"
+          fi
+
+          echo "Detected project root:"
+          echo "$PROJECT_ROOT"
+
           echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
 
-      - name: Prepare final structure
+      - name: Copy project into repository
+        shell: bash
         run: |
-          rm -rf user_app admin_panel supabase database assets docs
-          rm -f VERSION.txt README.md
+          set -e
 
-          mkdir -p user_app
-          mkdir -p admin_panel
-          mkdir -p supabase
-          mkdir -p database
-          mkdir -p assets
-          mkdir -p docs
+          cp -R "$PROJECT_ROOT"/. .
 
-          cp -R "$PROJECT_ROOT/user_app/." user_app/
-          cp -R "$PROJECT_ROOT/admin_web/." admin_panel/
-          cp -R "$PROJECT_ROOT/supabase/." supabase/
-          cp -R "$PROJECT_ROOT/database/." database/
-          cp -R "$PROJECT_ROOT/assets/." assets/
-          cp -R "$PROJECT_ROOT/docs/." docs/
+          echo "Project copied successfully."
 
-          cp "$PROJECT_ROOT/README.md" README.md
-          cp "$PROJECT_ROOT/VERSION.txt" VERSION.txt
-
-      - name: Validate required directories
+      - name: Normalize admin panel folder
+        shell: bash
         run: |
-          test -f user_app/pubspec.yaml
-          test -f admin_panel/index.html
-          test -f database/PRODUCTION.sql
-          test -f supabase/config.toml
-          test -f README.md
+          set -e
 
-      - name: Create required workflow directory
-        run: |
-          mkdir -p .github/workflows
+          if [ -d "admin_web" ] && [ ! -d "admin_panel" ]; then
+            mv admin_web admin_panel
+            echo "admin_web renamed to admin_panel"
+          fi
 
-      - name: Remove temporary extraction
+      - name: Remove temporary files
         run: |
-          rm -rf _extracted
+          rm -rf _zip_extract
 
-      - name: Show final project structure
+      - name: Validate project structure
+        shell: bash
         run: |
-          echo "===== FINAL STRUCTURE ====="
+          set -e
+
+          echo "===== VALIDATING PROJECT ====="
+
+          REQUIRED=0
+
+          if [ -d "user_app" ]; then
+            echo "PASS: user_app/"
+          else
+            echo "FAIL: user_app/"
+            REQUIRED=1
+          fi
+
+          if [ -d "admin_panel" ]; then
+            echo "PASS: admin_panel/"
+          else
+            echo "FAIL: admin_panel/"
+            REQUIRED=1
+          fi
+
+          if [ -d "supabase" ]; then
+            echo "PASS: supabase/"
+          else
+            echo "FAIL: supabase/"
+            REQUIRED=1
+          fi
+
+          if [ -d "database" ]; then
+            echo "PASS: database/"
+          else
+            echo "FAIL: database/"
+            REQUIRED=1
+          fi
+
+          if [ "$REQUIRED" -ne 0 ]; then
+            echo ""
+            echo "Expected production structure was not found."
+            echo ""
+            echo "Current repository structure:"
+            find . -maxdepth 3 \
+              -not -path "./.git/*" \
+              -not -path "./release/*" \
+              -print | sort
+
+            exit 1
+          fi
+
+          echo ""
+          echo "PROJECT STRUCTURE VALID."
+
+      - name: Show final structure
+        shell: bash
+        run: |
+          echo "================================"
+          echo " FINAL ZEN MINING STRUCTURE"
+          echo "================================"
+
           find . -maxdepth 3 \
-            -not -path './.git/*' \
-            -not -path './release/*' \
-            -not -path './.github/*' \
-            -type f | sort
+            -not -path "./.git/*" \
+            -print | sort
 
       - name: Commit extracted project
+        shell: bash
         run: |
+          set -e
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add user_app admin_panel supabase database assets docs README.md VERSION.txt
+          git add -A
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
