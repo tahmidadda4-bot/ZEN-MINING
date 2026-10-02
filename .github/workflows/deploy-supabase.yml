@@ -11,13 +11,28 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
           version: latest
+
+      - name: Check Supabase functions
+        run: |
+          echo "Checking Supabase functions..."
+
+          test -f supabase/functions/heartbeat/index.ts
+          test -f supabase/functions/register-device/index.ts
+          test -f supabase/functions/sync-activity/index.ts
+          test -f supabase/functions/sync-device-activity/index.ts
+          test -f supabase/functions/accrue-rewards/index.ts
+          test -f supabase/functions/request-withdrawal/index.ts
+          test -f supabase/functions/admin-action/index.ts
+          test -f supabase/functions/admin-dashboard/index.ts
+
+          echo "All 8 Edge Functions found."
 
       - name: Set reward secret
         env:
@@ -29,30 +44,75 @@ jobs:
             REWARD_CRON_SECRET="$REWARD_CRON_SECRET" \
             --project-ref "$SUPABASE_PROJECT_REF"
 
-      - name: Deploy Edge Functions
+      - name: Deploy heartbeat
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          for fn in \
-            health \
-            register-device \
-            sync-activity \
-            sync-device-activity \
-            accrue-rewards \
-            request-withdrawal \
-            admin-action \
-            admin-dashboard
-          do
-            echo "Deploying $fn..."
-            supabase functions deploy "$fn" \
-              --project-ref "$SUPABASE_PROJECT_REF"
-          done
+          supabase functions deploy heartbeat \
+            --project-ref "$SUPABASE_PROJECT_REF"
 
-      - name: Verify functions
+      - name: Deploy register-device
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
+          supabase functions deploy register-device \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy sync-activity
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy sync-activity \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy sync-device-activity
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy sync-device-activity \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy accrue-rewards
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy accrue-rewards \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy request-withdrawal
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy request-withdrawal \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy admin-action
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy admin-action \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy admin-dashboard
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase functions deploy admin-dashboard \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Verify deployment
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          echo "Deployed Edge Functions:"
           supabase functions list \
             --project-ref "$SUPABASE_PROJECT_REF"
