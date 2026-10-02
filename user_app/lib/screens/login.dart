@@ -1,0 +1,10 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../widgets/zen_logo.dart';
+import '../widgets/green_button.dart';
+import 'permissions.dart';
+class LoginScreen extends StatefulWidget{const LoginScreen({super.key});@override State<LoginScreen>createState()=>_LoginScreenState();}
+class _LoginScreenState extends State<LoginScreen>{final email=TextEditingController(),password=TextEditingController();bool busy=false;String? error;
+Future<void> login()async{setState(()=>busy=true);try{await Supabase.instance.client.auth.signInWithPassword(email:email.text.trim(),password:password.text);if(mounted)Navigator.pushReplacement(context,MaterialPageRoute(builder:(_)=>const PermissionsScreen()));}on AuthException catch(e){setState(()=>error=e.message);}catch(e){setState(()=>error=e.toString());}finally{if(mounted)setState(()=>busy=false);}}
+@override void dispose(){email.dispose();password.dispose();super.dispose();}
+@override Widget build(BuildContext c)=>Scaffold(body:SafeArea(child:SingleChildScrollView(padding:const EdgeInsets.all(22),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Center(child:ZenLogo(size:58)),const SizedBox(height:14),const Center(child:Text('ZEN MINING',style:TextStyle(fontSize:24,fontWeight:FontWeight.w900))),const SizedBox(height:38),const Text('Welcome Back',style:TextStyle(fontSize:25,fontWeight:FontWeight.w800)),const Text('Login to your account',style:TextStyle(color:Color(0xFF91A9A0))),const SizedBox(height:24),const Text('Email'),const SizedBox(height:7),TextField(controller:email,keyboardType:TextInputType.emailAddress,decoration:const InputDecoration(hintText:'Enter your email')),const SizedBox(height:15),const Text('Password'),const SizedBox(height:7),TextField(controller:password,obscureText:true,decoration:const InputDecoration(hintText:'Enter your password')),if(error!=null)Padding(padding:const EdgeInsets.only(top:10),child:Text(error!,style:const TextStyle(color:Color(0xFFFF5470)))),const SizedBox(height:20),GreenButton(label:busy?'Signing in...':'Login',onTap:busy?null:login)]))));}
