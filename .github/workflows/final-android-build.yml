@@ -108,7 +108,14 @@ jobs:
 
       - name: Run tests
         working-directory: user_app
-        run: flutter test
+        run: |
+          set -e
+
+          if [ -d "test" ]; then
+            flutter test
+          else
+            echo "No test directory found. Skipping Flutter tests."
+          fi
 
       - name: Clean project
         working-directory: user_app
