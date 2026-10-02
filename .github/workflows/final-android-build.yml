@@ -37,6 +37,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          set -euo pipefail
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
 
@@ -47,16 +48,13 @@ jobs:
 
           test -f pubspec.yaml
           test -f lib/main.dart
-
           test -f android/settings.gradle.kts
           test -f android/build.gradle.kts
           test -f android/app/build.gradle.kts
           test -f android/gradle/wrapper/gradle-wrapper.properties
-
           test -f android/app/src/main/AndroidManifest.xml
           test -f android/app/src/main/res/values/styles.xml
           test -f android/app/src/main/res/drawable/launch_background.xml
-
           test -f android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
           test -f android/app/src/main/kotlin/com/zenmining/app/BootReceiver.kt
           test -f android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt
@@ -66,59 +64,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 - <<'PY'
-          from pathlib import Path
+          if ! grep -q '^android.builtInKotlin=' android/gradle.properties; then
+            echo 'android.builtInKotlin=true' >> android/gradle.properties
+          else
+            sed -i 's/^android.builtInKotlin=.*/android.builtInKotlin=true/' android/gradle.properties
+          fi
 
-          p = Path("android/gradle.properties")
-          s = p.read_text()
+          if ! grep -q '^android.newDsl=' android/gradle.properties; then
+            echo 'android.newDsl=false' >> android/gradle.properties
+          else
+            sed -i 's/^android.newDsl=.*/android.newDsl=false/' android/gradle.properties
+          fi
 
-          def set_prop(text, key, value):
-              lines = text.splitlines()
-              found = False
-              out = []
+          sed -i '/^[[:space:]]*kotlinOptions[[:space:]]*{/,+2d' android/app/build.gradle.kts
 
-              for line in lines:
-                  if line.startswith(key + "="):
-                      if not found:
-                          out.append(f"{key}={value}")
-                          found = True
-                  else:
-                      out.append(line)
+          if ! grep -q 'compilerOptions' android/app/build.gradle.kts; then
+            sed -i '/^[[:space:]]*buildTypes[[:space:]]*{/i\
+          kotlin {\
+              compilerOptions {\
+                  jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\
+              }\
+          }\
+' android/app/build.gradle.kts
+          fi
 
-              if not found:
-                  out.append(f"{key}={value}")
-
-              return "\n".join(out) + "\n"
-
-          s = set_prop(s, "android.builtInKotlin", "true")
-          s = set_prop(s, "android.newDsl", "false")
-
-          p.write_text(s)
-
-          p = Path("android/app/build.gradle.kts")
-          s = p.read_text()
-
-          old = """    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-"""
-
-          new = """kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-    }
-}
-"""
-
-          if old in s:
-              s = s.replace(old, new)
-
-          p.write_text(s)
-          PY
-
-          echo "Final Android Kotlin configuration:"
+          echo "===== gradle.properties ====="
           cat android/gradle.properties
-          echo
+
+          echo "===== app/build.gradle.kts ====="
           cat android/app/build.gradle.kts
 
       - name: Reject Flutter V1 embedding
@@ -135,6 +108,7 @@ jobs:
             --include="*.kt" \
             --include="*.java" \
             --include="*.xml"; then
+
             echo "ERROR: Flutter V1 embedding reference found."
             exit 1
           fi
@@ -142,8 +116,7 @@ jobs:
           grep -q 'android:value="2"' \
             android/app/src/main/AndroidManifest.xml
 
-          grep -q \
-            'io.flutter.embedding.android.FlutterActivity' \
+          grep -q 'io.flutter.embedding.android.FlutterActivity' \
             android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
 
       - name: Install dependencies
@@ -220,6 +193,7 @@ jobs:
           echo "========== FINAL BUILD VERIFIED =========="
           echo "APK: $APK"
           echo "AAB: $AAB"
+
           ls -lh "$APK" "$AAB"
 
       - name: Upload APK
