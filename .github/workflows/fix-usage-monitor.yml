@@ -1,0 +1,57 @@
+name: Fix Usage Monitor Service
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fix UsageMonitorService.kt
+        run: |
+          set -e
+
+          FILE="user_app/android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt"
+
+          test -f "$FILE"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("user_app/android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt")
+          s = p.read_text()
+
+          if "import android.content.Intent" not in s:
+              s = s.replace(
+                  "import android.content.Context\n",
+                  "import android.content.Context\nimport android.content.Intent\n"
+              )
+
+          p.write_text(s)
+          PY
+
+          grep -q "import android.content.Intent" "$FILE"
+
+          echo "UsageMonitorService.kt fixed."
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add user_app/android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt
+
+          if git diff --cached --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+
+          git commit -m "Fix UsageMonitorService Intent import"
+          git push
