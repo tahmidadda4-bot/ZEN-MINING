@@ -1,10 +1,10 @@
-name: Fix ZEN MINING User App
+name: Extract Fixed User App v1.4
 
 on:
   workflow_dispatch:
 
 jobs:
-  fix-user-app:
+  extract:
     runs-on: ubuntu-latest
 
     permissions:
@@ -14,11 +14,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract user_app
+      - name: Extract user_app from v1.4
         run: |
           set -e
 
-          ZIP="zen_mining_production_build_ready_v1_3.zip"
+          ZIP="zen_mining_production_build_fixed_v1_4.zip"
 
           test -f "$ZIP"
 
@@ -27,58 +27,35 @@ jobs:
 
           unzip -q "$ZIP" -d /tmp/zen_extract
 
-          USER_APP_DIR=$(find /tmp/zen_extract -type d -name "user_app" | head -n 1)
+          SOURCE="/tmp/zen_extract/zen_mining_production_v1_4/user_app"
 
-          test -n "$USER_APP_DIR"
-          test -f "$USER_APP_DIR/pubspec.yaml"
+          test -d "$SOURCE"
+          test -f "$SOURCE/pubspec.yaml"
+          test -f "$SOURCE/android/app/src/main/AndroidManifest.xml"
 
           rm -rf user_app
-          cp -a "$USER_APP_DIR" user_app
+          cp -a "$SOURCE" user_app
 
-      - name: Add missing Android themes
+          echo "Fixed user_app extracted successfully."
+
+      - name: Verify fixed Android project
         run: |
           set -e
 
-          mkdir -p user_app/android/app/src/main/res/values
-
-          cat > user_app/android/app/src/main/res/values/styles.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-
-              <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-                  <item name="android:windowBackground">@drawable/launch_background</item>
-                  <item name="android:windowNoTitle">true</item>
-                  <item name="android:fontFamily">sans</item>
-              </style>
-
-              <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-                  <item name="android:windowBackground">#000000</item>
-              </style>
-
-          </resources>
-          EOF
-
-          mkdir -p user_app/android/app/src/main/res/drawable
-
-          cat > user_app/android/app/src/main/res/drawable/launch_background.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-              <item android:drawable="@android:color/black" />
-          </layer-list>
-          EOF
-
-      - name: Verify Android resources
-        run: |
-          set -e
-
+          test -f user_app/pubspec.yaml
+          test -f user_app/lib/main.dart
+          test -f user_app/android/settings.gradle.kts
+          test -f user_app/android/app/build.gradle.kts
+          test -f user_app/android/gradle/wrapper/gradle-wrapper.properties
           test -f user_app/android/app/src/main/res/values/styles.xml
           test -f user_app/android/app/src/main/res/drawable/launch_background.xml
-          test -f user_app/android/app/src/main/AndroidManifest.xml
-          test -f user_app/pubspec.yaml
+          test -f user_app/android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
+          test -f user_app/android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt
+          test -f user_app/android/app/src/main/kotlin/com/zenmining/app/BootReceiver.kt
 
-          echo "Android resources verified."
+          echo "All fixed user_app files verified."
 
-      - name: Commit fixed user_app
+      - name: Commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -86,9 +63,9 @@ jobs:
           git add user_app
 
           if git diff --cached --quiet; then
-            echo "No changes detected."
+            echo "No changes to commit."
             exit 0
           fi
 
-          git commit -m "Fix Flutter Android launch themes"
+          git commit -m "Update user_app to production fixed v1.4"
           git push
