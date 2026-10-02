@@ -37,15 +37,14 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          set -euo pipefail
+          set -e
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
 
       - name: Verify project
         working-directory: user_app
         run: |
-          set -euo pipefail
-
+          set -e
           test -f pubspec.yaml
           test -f lib/main.dart
           test -f android/settings.gradle.kts
@@ -59,45 +58,29 @@ jobs:
           test -f android/app/src/main/kotlin/com/zenmining/app/BootReceiver.kt
           test -f android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt
 
-      - name: Configure built-in Kotlin
+      - name: Configure Kotlin
         working-directory: user_app
         run: |
-          set -euo pipefail
+          set -e
 
-          if ! grep -q '^android.builtInKotlin=' android/gradle.properties; then
-            echo 'android.builtInKotlin=true' >> android/gradle.properties
-          else
+          if grep -q '^android.builtInKotlin=' android/gradle.properties; then
             sed -i 's/^android.builtInKotlin=.*/android.builtInKotlin=true/' android/gradle.properties
-          fi
-
-          if ! grep -q '^android.newDsl=' android/gradle.properties; then
-            echo 'android.newDsl=false' >> android/gradle.properties
           else
+            echo 'android.builtInKotlin=true' >> android/gradle.properties
+          fi
+
+          if grep -q '^android.newDsl=' android/gradle.properties; then
             sed -i 's/^android.newDsl=.*/android.newDsl=false/' android/gradle.properties
+          else
+            echo 'android.newDsl=false' >> android/gradle.properties
           fi
 
-          sed -i '/^[[:space:]]*kotlinOptions[[:space:]]*{/,+2d' android/app/build.gradle.kts
+          python3 -c 'from pathlib import Path; p=Path("android/app/build.gradle.kts"); s=p.read_text(); old="    kotlinOptions {\\n        jvmTarget = JavaVersion.VERSION_17.toString()\\n    }\\n"; new="    kotlin {\\n        compilerOptions {\\n            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\\n        }\\n    }\\n"; p.write_text(s.replace(old,new))'
 
-          if ! grep -q 'compilerOptions' android/app/build.gradle.kts; then
-            sed -i '/^[[:space:]]*buildTypes[[:space:]]*{/i\
-          kotlin {\
-              compilerOptions {\
-                  jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\
-              }\
-          }\
-' android/app/build.gradle.kts
-          fi
-
-          echo "===== gradle.properties ====="
-          cat android/gradle.properties
-
-          echo "===== app/build.gradle.kts ====="
-          cat android/app/build.gradle.kts
-
-      - name: Reject Flutter V1 embedding
+      - name: Check Flutter embedding
         working-directory: user_app
         run: |
-          set -euo pipefail
+          set -e
 
           if grep -R -n \
             -e "io.flutter.app" \
@@ -108,34 +91,30 @@ jobs:
             --include="*.kt" \
             --include="*.java" \
             --include="*.xml"; then
-
-            echo "ERROR: Flutter V1 embedding reference found."
+            echo "ERROR: Flutter V1 embedding found."
             exit 1
           fi
 
-          grep -q 'android:value="2"' \
-            android/app/src/main/AndroidManifest.xml
-
-          grep -q 'io.flutter.embedding.android.FlutterActivity' \
-            android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
+          grep -q 'android:value="2"' android/app/src/main/AndroidManifest.xml
+          grep -q 'io.flutter.embedding.android.FlutterActivity' android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
 
       - name: Install dependencies
         working-directory: user_app
         run: flutter pub get
 
-      - name: Analyze Dart code
+      - name: Analyze Dart
         working-directory: user_app
         run: flutter analyze --no-fatal-infos
 
-      - name: Run Flutter tests
+      - name: Run tests
         working-directory: user_app
         run: flutter test
 
-      - name: Clean
+      - name: Clean project
         working-directory: user_app
         run: flutter clean
 
-      - name: Get dependencies again
+      - name: Restore dependencies
         working-directory: user_app
         run: flutter pub get
 
@@ -145,7 +124,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          set -euo pipefail
+          set -e
 
           flutter build apk --release \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
@@ -156,7 +135,7 @@ jobs:
           test -n "$APK"
           test -s "$APK"
 
-          echo "APK successfully created:"
+          echo "APK BUILD SUCCESSFUL"
           ls -lh "$APK"
 
       - name: Build AAB
@@ -165,7 +144,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          set -euo pipefail
+          set -e
 
           flutter build appbundle --release \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
@@ -176,13 +155,13 @@ jobs:
           test -n "$AAB"
           test -s "$AAB"
 
-          echo "AAB successfully created:"
+          echo "AAB BUILD SUCCESSFUL"
           ls -lh "$AAB"
 
-      - name: Final artifact verification
+      - name: Final verification
         working-directory: user_app
         run: |
-          set -euo pipefail
+          set -e
 
           APK="$(find build/app/outputs -type f -name 'app-release.apk' | head -n 1)"
           AAB="$(find build/app/outputs -type f -name 'app-release.aab' | head -n 1)"
@@ -190,11 +169,13 @@ jobs:
           test -s "$APK"
           test -s "$AAB"
 
-          echo "========== FINAL BUILD VERIFIED =========="
-          echo "APK: $APK"
-          echo "AAB: $AAB"
-
-          ls -lh "$APK" "$AAB"
+          echo "================================"
+          echo " ZEN MINING BUILD VERIFIED"
+          echo "================================"
+          echo "APK:"
+          ls -lh "$APK"
+          echo "AAB:"
+          ls -lh "$AAB"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
