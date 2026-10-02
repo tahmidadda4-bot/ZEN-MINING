@@ -1,0 +1,64 @@
+name: Extract User App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract-user-app:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract user_app
+        run: |
+          set -e
+
+          ZIP="zen_mining_production_build_ready_v1_3.zip"
+
+          test -f "$ZIP"
+
+          rm -rf /tmp/zen_extract
+          mkdir -p /tmp/zen_extract
+
+          unzip -q "$ZIP" -d /tmp/zen_extract
+
+          USER_APP_DIR=$(find /tmp/zen_extract -type d -name "user_app" | head -n 1)
+
+          test -n "$USER_APP_DIR"
+          test -f "$USER_APP_DIR/pubspec.yaml"
+
+          echo "Found user_app: $USER_APP_DIR"
+
+          rm -rf user_app
+          cp -a "$USER_APP_DIR" user_app
+
+      - name: Verify user_app
+        run: |
+          set -e
+
+          test -f user_app/pubspec.yaml
+          test -f user_app/lib/main.dart
+          test -d user_app/android
+
+          echo "user_app extracted successfully."
+          find user_app -maxdepth 2 -type f | sort | head -100
+
+      - name: Commit user_app
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add user_app
+
+          if git diff --cached --quiet; then
+            echo "No user_app changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Extract fixed user_app"
+          git push
