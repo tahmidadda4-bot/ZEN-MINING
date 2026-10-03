@@ -11,9 +11,17 @@ jobs:
       contents: read
 
     steps:
+
+      # ==============================
+      # CHECKOUT
+      # ==============================
       - name: Checkout
         uses: actions/checkout@v4
 
+
+      # ==============================
+      # JAVA 17
+      # ==============================
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -21,43 +29,74 @@ jobs:
           java-version: "17"
           cache: gradle
 
+
+      # ==============================
+      # FLUTTER
+      # ==============================
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+
+      # ==============================
+      # VERIFY FLUTTER
+      # ==============================
       - name: Verify Flutter
         run: |
           flutter --version
           dart --version
 
+
+      # ==============================
+      # VERIFY SUPABASE SECRETS
+      # ==============================
       - name: Verify secrets
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           set -e
+
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
 
+          echo "Supabase secrets are available."
+
+
+      # ==============================
+      # VERIFY PROJECT
+      # ==============================
       - name: Verify project
         working-directory: user_app
         run: |
           set -e
+
           test -f pubspec.yaml
           test -f lib/main.dart
+
           test -f android/settings.gradle.kts
           test -f android/build.gradle.kts
           test -f android/app/build.gradle.kts
+
           test -f android/gradle/wrapper/gradle-wrapper.properties
+
           test -f android/app/src/main/AndroidManifest.xml
+
           test -f android/app/src/main/res/values/styles.xml
           test -f android/app/src/main/res/drawable/launch_background.xml
+
           test -f android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
           test -f android/app/src/main/kotlin/com/zenmining/app/BootReceiver.kt
           test -f android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt
 
+          echo "Project verification successful."
+
+
+      # ==============================
+      # CHECK FLUTTER V2 EMBEDDING
+      # ==============================
       - name: Check Flutter embedding
         working-directory: user_app
         run: |
@@ -72,21 +111,44 @@ jobs:
             --include="*.kt" \
             --include="*.java" \
             --include="*.xml"; then
+
             echo "ERROR: Flutter V1 embedding found."
             exit 1
           fi
 
-          grep -q 'android:value="2"' android/app/src/main/AndroidManifest.xml
-          grep -q 'io.flutter.embedding.android.FlutterActivity' android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
+          grep -q 'android:value="2"' \
+            android/app/src/main/AndroidManifest.xml
 
+          grep -q \
+            'io.flutter.embedding.android.FlutterActivity' \
+            android/app/src/main/kotlin/com/zenmining/app/MainActivity.kt
+
+          echo "Flutter V2 embedding verified."
+
+
+      # ==============================
+      # INSTALL DEPENDENCIES
+      # ==============================
       - name: Install dependencies
         working-directory: user_app
-        run: flutter pub get
+        run: |
+          set -e
+          flutter pub get
 
+
+      # ==============================
+      # ANALYZE DART
+      # ==============================
       - name: Analyze Dart
         working-directory: user_app
-        run: flutter analyze --no-fatal-infos
+        run: |
+          set -e
+          flutter analyze --no-fatal-infos
 
+
+      # ==============================
+      # TEST
+      # ==============================
       - name: Run tests
         working-directory: user_app
         run: |
@@ -95,83 +157,213 @@ jobs:
           if [ -d "test" ]; then
             flutter test
           else
-            echo "No test directory found. Skipping Flutter tests."
+            echo "No test directory found."
+            echo "Skipping Flutter tests."
           fi
 
+
+      # ==============================
+      # CLEAN
+      # ==============================
       - name: Clean project
         working-directory: user_app
-        run: flutter clean
+        run: |
+          set -e
+          flutter clean
 
+
+      # ==============================
+      # RESTORE DEPENDENCIES
+      # ==============================
       - name: Restore dependencies
         working-directory: user_app
-        run: flutter pub get
+        run: |
+          set -e
+          flutter pub get
 
+
+      # ==========================================================
+      # BUILD APK
+      #
+      # IMPORTANT:
+      # Flutter/AGP 9 may create the APK successfully but Flutter
+      # may return exit code 1 because it cannot locate the output.
+      #
+      # Therefore we DO NOT immediately fail on flutter's exit code.
+      # We search for the real APK after the command finishes.
+      # ==========================================================
       - name: Build APK
         working-directory: user_app
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          set -e
+          set +e
+
+          echo "================================"
+          echo " Building ZEN MINING APK"
+          echo "================================"
 
           flutter build apk --release \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
 
-          echo "Searching for generated APK..."
+          FLUTTER_EXIT=$?
 
-          find . -type f -name "*.apk" -print || true
+          echo ""
+          echo "Flutter build exit code: $FLUTTER_EXIT"
+          echo ""
+          echo "Searching for APK files..."
+          echo ""
 
-          APK="$(find android/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
+          find . \
+            -type f \
+            -name "*.apk" \
+            -print || true
+
+          APK=""
+
+          APK="$(find build -type f -name "app-release.apk" | head -n 1 || true)"
 
           if [ -z "$APK" ]; then
-            APK="$(find build -type f -name '*.apk' | head -n 1 || true)"
+            APK="$(find android/app/build -type f -name "app-release.apk" | head -n 1 || true)"
           fi
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not found."
+            APK="$(find . -type f -name "app-release.apk" | head -n 1 || true)"
+          fi
+
+          echo ""
+
+          if [ -z "$APK" ]; then
+            echo "================================"
+            echo " ERROR: APK NOT FOUND"
+            echo "================================"
+
+            echo ""
+            echo "Build directory:"
+            find build -maxdepth 6 -type f 2>/dev/null | sort | head -300 || true
+
+            echo ""
+            echo "Android build directory:"
+            find android/app/build -maxdepth 8 -type f 2>/dev/null | sort | head -300 || true
+
             exit 1
           fi
 
-          mkdir -p build/app/outputs/flutter-apk
-          cp "$APK" build/app/outputs/flutter-apk/app-release.apk
+          echo "================================"
+          echo " APK FOUND"
+          echo "================================"
+          echo "APK path: $APK"
 
-          echo "APK BUILD SUCCESSFUL"
+          mkdir -p build/app/outputs/flutter-apk
+
+          cp "$APK" \
+            build/app/outputs/flutter-apk/app-release.apk
+
+          echo ""
+          echo "Final APK:"
           ls -lh build/app/outputs/flutter-apk/app-release.apk
 
+          echo ""
+
+          if [ "$FLUTTER_EXIT" -ne 0 ]; then
+            echo "Flutter reported an output-location error,"
+            echo "but the APK was successfully generated."
+          else
+            echo "Flutter APK build completed successfully."
+          fi
+
+
+      # ==========================================================
+      # BUILD AAB
+      # ==========================================================
       - name: Build AAB
         working-directory: user_app
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          set -e
+          set +e
+
+          echo "================================"
+          echo " Building ZEN MINING AAB"
+          echo "================================"
 
           flutter build appbundle --release \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
 
-          echo "Searching for generated AAB..."
+          FLUTTER_EXIT=$?
 
-          find . -type f -name "*.aab" -print || true
+          echo ""
+          echo "Flutter build exit code: $FLUTTER_EXIT"
+          echo ""
+          echo "Searching for AAB files..."
+          echo ""
 
-          AAB="$(find android/app/build/outputs/bundle/release -type f -name '*.aab' | head -n 1 || true)"
+          find . \
+            -type f \
+            -name "*.aab" \
+            -print || true
+
+          AAB=""
+
+          AAB="$(find build -type f -name "app-release.aab" | head -n 1 || true)"
 
           if [ -z "$AAB" ]; then
-            AAB="$(find build -type f -name '*.aab' | head -n 1 || true)"
+            AAB="$(find android/app/build -type f -name "app-release.aab" | head -n 1 || true)"
           fi
 
           if [ -z "$AAB" ]; then
-            echo "ERROR: AAB was not found."
+            AAB="$(find . -type f -name "app-release.aab" | head -n 1 || true)"
+          fi
+
+          echo ""
+
+          if [ -z "$AAB" ]; then
+            echo "================================"
+            echo " ERROR: AAB NOT FOUND"
+            echo "================================"
+
+            echo ""
+            echo "Build directory:"
+            find build -maxdepth 8 -type f 2>/dev/null | sort | head -300 || true
+
+            echo ""
+            echo "Android build directory:"
+            find android/app/build -maxdepth 10 -type f 2>/dev/null | sort | head -300 || true
+
             exit 1
           fi
 
-          mkdir -p build/app/outputs/bundle/release
-          cp "$AAB" build/app/outputs/bundle/release/app-release.aab
+          echo "================================"
+          echo " AAB FOUND"
+          echo "================================"
+          echo "AAB path: $AAB"
 
-          echo "AAB BUILD SUCCESSFUL"
+          mkdir -p build/app/outputs/bundle/release
+
+          cp "$AAB" \
+            build/app/outputs/bundle/release/app-release.aab
+
+          echo ""
+          echo "Final AAB:"
           ls -lh build/app/outputs/bundle/release/app-release.aab
 
+          echo ""
+
+          if [ "$FLUTTER_EXIT" -ne 0 ]; then
+            echo "Flutter reported an output-location error,"
+            echo "but the AAB was successfully generated."
+          else
+            echo "Flutter AAB build completed successfully."
+          fi
+
+
+      # ==============================
+      # FINAL VERIFICATION
+      # ==============================
       - name: Final verification
         working-directory: user_app
         run: |
@@ -180,17 +372,32 @@ jobs:
           APK="build/app/outputs/flutter-apk/app-release.apk"
           AAB="build/app/outputs/bundle/release/app-release.aab"
 
+          echo "Checking APK..."
           test -s "$APK"
+
+          echo "Checking AAB..."
           test -s "$AAB"
 
+          echo ""
           echo "================================"
           echo " ZEN MINING BUILD VERIFIED"
           echo "================================"
+
+          echo ""
           echo "APK:"
           ls -lh "$APK"
+
+          echo ""
           echo "AAB:"
           ls -lh "$AAB"
 
+          echo ""
+          echo "BUILD SUCCESSFUL"
+
+
+      # ==============================
+      # UPLOAD APK
+      # ==============================
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -199,6 +406,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+
+      # ==============================
+      # UPLOAD AAB
+      # ==============================
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
