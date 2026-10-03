@@ -58,25 +58,6 @@ jobs:
           test -f android/app/src/main/kotlin/com/zenmining/app/BootReceiver.kt
           test -f android/app/src/main/kotlin/com/zenmining/app/UsageMonitorService.kt
 
-      - name: Configure Kotlin
-        working-directory: user_app
-        run: |
-          set -e
-
-          if grep -q '^android.builtInKotlin=' android/gradle.properties; then
-            sed -i 's/^android.builtInKotlin=.*/android.builtInKotlin=true/' android/gradle.properties
-          else
-            echo 'android.builtInKotlin=true' >> android/gradle.properties
-          fi
-
-          if grep -q '^android.newDsl=' android/gradle.properties; then
-            sed -i 's/^android.newDsl=.*/android.newDsl=false/' android/gradle.properties
-          else
-            echo 'android.newDsl=false' >> android/gradle.properties
-          fi
-
-          python3 -c 'from pathlib import Path; p=Path("android/app/build.gradle.kts"); s=p.read_text(); old="    kotlinOptions {\\n        jvmTarget = JavaVersion.VERSION_17.toString()\\n    }\\n"; new="    kotlin {\\n        compilerOptions {\\n            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\\n        }\\n    }\\n"; p.write_text(s.replace(old,new))'
-
       - name: Check Flutter embedding
         working-directory: user_app
         run: |
