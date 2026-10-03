@@ -118,13 +118,26 @@ jobs:
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
 
-          APK="$(find build/app/outputs -type f -name 'app-release.apk' | head -n 1)"
+          echo "Searching for generated APK..."
 
-          test -n "$APK"
-          test -s "$APK"
+          find . -type f -name "*.apk" -print || true
+
+          APK="$(find android/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1 || true)"
+
+          if [ -z "$APK" ]; then
+            APK="$(find build -type f -name '*.apk' | head -n 1 || true)"
+          fi
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not found."
+            exit 1
+          fi
+
+          mkdir -p build/app/outputs/flutter-apk
+          cp "$APK" build/app/outputs/flutter-apk/app-release.apk
 
           echo "APK BUILD SUCCESSFUL"
-          ls -lh "$APK"
+          ls -lh build/app/outputs/flutter-apk/app-release.apk
 
       - name: Build AAB
         working-directory: user_app
@@ -138,21 +151,34 @@ jobs:
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
 
-          AAB="$(find build/app/outputs -type f -name 'app-release.aab' | head -n 1)"
+          echo "Searching for generated AAB..."
 
-          test -n "$AAB"
-          test -s "$AAB"
+          find . -type f -name "*.aab" -print || true
+
+          AAB="$(find android/app/build/outputs/bundle/release -type f -name '*.aab' | head -n 1 || true)"
+
+          if [ -z "$AAB" ]; then
+            AAB="$(find build -type f -name '*.aab' | head -n 1 || true)"
+          fi
+
+          if [ -z "$AAB" ]; then
+            echo "ERROR: AAB was not found."
+            exit 1
+          fi
+
+          mkdir -p build/app/outputs/bundle/release
+          cp "$AAB" build/app/outputs/bundle/release/app-release.aab
 
           echo "AAB BUILD SUCCESSFUL"
-          ls -lh "$AAB"
+          ls -lh build/app/outputs/bundle/release/app-release.aab
 
       - name: Final verification
         working-directory: user_app
         run: |
           set -e
 
-          APK="$(find build/app/outputs -type f -name 'app-release.apk' | head -n 1)"
-          AAB="$(find build/app/outputs -type f -name 'app-release.aab' | head -n 1)"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          AAB="build/app/outputs/bundle/release/app-release.aab"
 
           test -s "$APK"
           test -s "$AAB"
@@ -169,7 +195,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zen-mining-release-apk
-          path: user_app/build/app/outputs/**/*.apk
+          path: user_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -177,6 +203,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zen-mining-release-aab
-          path: user_app/build/app/outputs/**/*.aab
+          path: user_app/build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
